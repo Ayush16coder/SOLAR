@@ -1,0 +1,13 @@
+{
+  "name": "solar-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build:web": "npm run build --prefix apps/web",
+    "build:server": "npm run build --prefix apps/server",
+    "build": "npm run build:web && npm run build:server",
+    "install:all": "npm install --prefix apps/web && npm install --prefix apps/server"
+  }
+}
