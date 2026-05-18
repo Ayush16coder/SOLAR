@@ -1,4 +1,4 @@
-import { DeploymentStatus } from '@prisma/client';
+import { DeploymentStatus } from '../../types';
 
 export interface DeploymentOptions {
   projectId: string;

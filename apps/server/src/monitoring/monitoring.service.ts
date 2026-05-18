@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { EventService } from '../event/event.service';
 import { AiService } from '../ai/ai.service';
 import { LogEntry, LogLevel, LogSource, MetricEntry } from './types';
@@ -9,7 +9,7 @@ export class MonitoringService {
   private readonly logger = new Logger(MonitoringService.name);
 
   constructor(
-    private prisma: PrismaService,
+    private supabase: SupabaseService,
     private eventService: EventService,
     private aiService: AiService,
   ) {}

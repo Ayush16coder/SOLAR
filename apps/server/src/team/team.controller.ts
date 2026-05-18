@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, Param, UseGuards, Delete } from '@nestjs/c
 import { TeamService } from './team.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
-import { Role } from '@prisma/client';
+import { Role } from '../types';
 
 @Controller('teams')
 @UseGuards(JwtAuthGuard)

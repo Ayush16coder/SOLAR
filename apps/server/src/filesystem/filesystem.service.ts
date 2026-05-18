@@ -1,12 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { GithubService } from '../github/github.service';
-import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class FilesystemService {
   constructor(
     private githubService: GithubService,
-    private prisma: PrismaService,
   ) {}
 
   async getFileTree(workspaceId: string, owner: string, repo: string, branch: string = 'main') {

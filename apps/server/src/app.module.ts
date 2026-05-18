@@ -4,7 +4,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PrismaModule } from './prisma/prisma.module';
+import { SupabaseModule } from './supabase/supabase.module';
 import { AuthModule } from './auth/auth.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { TeamModule } from './team/team.module';
@@ -29,7 +29,7 @@ import { MarketplaceModule } from './marketplace/marketplace.module';
       ttl: 60000,
       limit: 100,
     }]),
-    PrismaModule,
+    SupabaseModule,
     AuthModule,
     WorkspaceModule,
     TeamModule,

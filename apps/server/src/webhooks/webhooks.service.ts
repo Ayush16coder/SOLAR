@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { DeploymentService } from '../deployment/deployment.service';
 import { EventService } from '../event/event.service';
 
@@ -8,7 +8,7 @@ export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
 
   constructor(
-    private prisma: PrismaService,
+    private supabase: SupabaseService,
     private deploymentService: DeploymentService,
     private eventService: EventService,
   ) {}
@@ -19,9 +19,13 @@ export class WebhooksService {
     // Find workspace associated with this repo to determine the room
     const repoUrl = payload.repository?.html_url;
     if (repoUrl) {
-      const project = await this.prisma.project.findFirst({
-        where: { repoUrl },
-      });
+      const { data: project } = await this.supabase.client
+        .from('Project')
+        .select('*')
+        .eq('repoUrl', repoUrl)
+        .limit(1)
+        .single();
+        
       if (project) {
         await this.eventService.publish(`project:${project.id}`, {
           type: 'GITHUB_WEBHOOK',
@@ -53,10 +57,12 @@ export class WebhooksService {
 
     this.logger.log(`Push detected on ${repoUrl} (branch: ${branch})`);
 
-    // Find project associated with this repo
-    const project = await this.prisma.project.findFirst({
-      where: { repoUrl },
-    });
+    const { data: project } = await this.supabase.client
+      .from('Project')
+      .select('*')
+      .eq('repoUrl', repoUrl)
+      .limit(1)
+      .single();
 
     if (project) {
       this.logger.log(`Auto-deploying project: ${project.name} for branch: ${branch}`);

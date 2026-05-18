@@ -1,38 +1,44 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class MarketplaceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private supabase: SupabaseService) {}
 
   async listPlugins() {
-    return this.prisma.plugin.findMany();
+    const { data } = await this.supabase.client.from('Plugin').select('*');
+    return data;
   }
 
   async installPlugin(workspaceId: string, pluginId: string, config: any) {
-    return this.prisma.pluginInstallation.create({
-      data: {
+    const { data } = await this.supabase.client
+      .from('PluginInstallation')
+      .insert({
         workspaceId,
         pluginId,
         config,
         status: 'ENABLED',
-      },
-    });
+      })
+      .select()
+      .single();
+    return data;
   }
 
   async getInstalledPlugins(workspaceId: string) {
-    return this.prisma.pluginInstallation.findMany({
-      where: { workspaceId },
-      include: { plugin: true },
-    });
+    const { data } = await this.supabase.client
+      .from('PluginInstallation')
+      .select('*, plugin:Plugin(*)')
+      .eq('workspaceId', workspaceId);
+    return data;
   }
 
   async updatePluginConfig(workspaceId: string, pluginId: string, config: any) {
-    return this.prisma.pluginInstallation.update({
-      where: {
-        pluginId_workspaceId: { workspaceId, pluginId },
-      },
-      data: { config },
-    });
+    const { data } = await this.supabase.client
+      .from('PluginInstallation')
+      .update({ config })
+      .match({ workspaceId, pluginId })
+      .select()
+      .single();
+    return data;
   }
 }

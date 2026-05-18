@@ -1,10 +1,10 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { VercelAdapter } from './adapters/vercel.adapter';
 import { NetlifyAdapter } from './adapters/netlify.adapter';
 import { RailwayAdapter } from './adapters/railway.adapter';
 import { DeploymentProvider, DeploymentOptions } from './adapters/provider.interface';
-import { DeploymentStatus, ProviderType } from '@prisma/client';
+import { DeploymentStatus, ProviderType } from '../types';
 import { EventService } from '../event/event.service';
 
 @Injectable()
@@ -12,19 +12,16 @@ export class DeploymentService {
   private readonly logger = new Logger(DeploymentService.name);
 
   constructor(
-    private prisma: PrismaService,
+    private supabase: SupabaseService,
     private eventService: EventService,
   ) {}
 
   private async getAdapter(workspaceId: string, provider: ProviderType): Promise<DeploymentProvider> {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: {
-        workspaceId_provider: {
-          workspaceId,
-          provider,
-        },
-      },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider })
+      .single();
 
     if (!integration || !integration.config) {
       throw new BadRequestException(`${provider} not connected for this workspace`);
@@ -46,20 +43,22 @@ export class DeploymentService {
   }
 
   async triggerDeployment(projectId: string, branch?: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      include: { workspace: true },
-    });
+    const { data: project } = await this.supabase.client
+      .from('Project')
+      .select('*, workspace:Workspace(*)')
+      .eq('id', projectId)
+      .single();
 
     if (!project) throw new BadRequestException('Project not found');
 
     // Find the primary deployment integration for this workspace
-    const integration = await this.prisma.workspaceIntegration.findFirst({
-      where: {
-        workspaceId: project.workspaceId,
-        provider: { in: [ProviderType.VERCEL, ProviderType.NETLIFY, ProviderType.RAILWAY] },
-      },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .eq('workspaceId', project.workspaceId)
+      .in('provider', [ProviderType.VERCEL, ProviderType.NETLIFY, ProviderType.RAILWAY])
+      .limit(1)
+      .single();
 
     if (!integration) throw new BadRequestException('No deployment provider connected');
 
@@ -68,13 +67,15 @@ export class DeploymentService {
     this.logger.log(`Triggering ${integration.provider} deployment for project ${project.name}`);
 
     // Create record in our DB
-    const deploymentRecord = await this.prisma.deployment.create({
-      data: {
+    const { data: deploymentRecord } = await this.supabase.client
+      .from('Deployment')
+      .insert({
         projectId,
         status: DeploymentStatus.QUEUED,
         provider: integration.provider,
-      },
-    });
+      })
+      .select()
+      .single();
 
     await this.eventService.publish(`project:${projectId}`, {
       type: 'DEPLOYMENT_STARTED',
@@ -93,13 +94,13 @@ export class DeploymentService {
       const result = await adapter.deploy(options);
 
       // Update record with provider info
-      await this.prisma.deployment.update({
-        where: { id: deploymentRecord.id },
-        data: {
+      await this.supabase.client
+        .from('Deployment')
+        .update({
           status: result.status,
           logsUrl: result.logsUrl,
-        },
-      });
+        })
+        .eq('id', deploymentRecord.id);
 
       await this.eventService.publish(`project:${projectId}`, {
         type: 'DEPLOYMENT_UPDATED',
@@ -111,10 +112,10 @@ export class DeploymentService {
       return result;
     } catch (error) {
       this.logger.error(`Deployment failed: ${error.message}`);
-      await this.prisma.deployment.update({
-        where: { id: deploymentRecord.id },
-        data: { status: DeploymentStatus.FAILED },
-      });
+      await this.supabase.client
+        .from('Deployment')
+        .update({ status: DeploymentStatus.FAILED })
+        .eq('id', deploymentRecord.id);
 
       await this.eventService.publish(`project:${projectId}`, {
         type: 'DEPLOYMENT_FAILED',
@@ -127,10 +128,11 @@ export class DeploymentService {
   }
 
   async getDeploymentStatus(deploymentId: string) {
-    const deployment = await this.prisma.deployment.findUnique({
-      where: { id: deploymentId },
-      include: { project: { include: { workspace: true } } },
-    });
+    const { data: deployment } = await this.supabase.client
+      .from('Deployment')
+      .select('*, project:Project(*)')
+      .eq('id', deploymentId)
+      .single();
 
     if (!deployment) throw new BadRequestException('Deployment not found');
 

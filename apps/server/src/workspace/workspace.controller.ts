@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
 import { WorkspaceService } from './workspace.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ProviderType } from '@prisma/client';
+import { ProviderType } from '../types';
 
 @Controller('workspaces')
 @UseGuards(JwtAuthGuard)

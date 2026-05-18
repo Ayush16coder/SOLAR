@@ -1,5 +1,5 @@
 import { DeploymentProvider, DeploymentOptions, DeploymentResult } from './provider.interface';
-import { DeploymentStatus } from '@prisma/client';
+import { DeploymentStatus } from '../../types';
 import axios from 'axios';
 
 export class NetlifyAdapter implements DeploymentProvider {

@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { CloudProviderType, CloudResource, IaCConfig, ResourceStatus } from './types';
 
 @Injectable()
@@ -9,7 +9,7 @@ export class InfrastructureService {
 
   constructor(
     private aiService: AiService,
-    private prisma: PrismaService,
+    private supabase: SupabaseService,
   ) {}
 
   async generateIaC(workspaceId: string, type: 'terraform' | 'k8s' | 'docker-compose', description: string): Promise<IaCConfig> {

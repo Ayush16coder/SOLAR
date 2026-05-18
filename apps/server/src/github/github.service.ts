@@ -1,14 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Octokit } from 'octokit';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { EventService } from '../event/event.service';
 
 @Injectable()
 export class GithubService {
   constructor(
     private configService: ConfigService,
-    private prisma: PrismaService,
+    private supabase: SupabaseService,
     private eventService: EventService,
   ) {}
 
@@ -40,44 +40,48 @@ export class GithubService {
       throw new BadRequestException(data.error_description || 'GitHub OAuth failed');
     }
 
+    const config = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : null,
+      scope: data.scope,
+    };
+
     // Store integration in DB
-    return this.prisma.workspaceIntegration.upsert({
-      where: {
-        workspaceId_provider: {
+    const { data: existing } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('id')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+
+    if (existing) {
+      const { data: updated } = await this.supabase.client
+        .from('WorkspaceIntegration')
+        .update({ config })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      return updated;
+    } else {
+      const { data: inserted } = await this.supabase.client
+        .from('WorkspaceIntegration')
+        .insert({
           workspaceId,
           provider: 'GITHUB',
-        },
-      },
-      update: {
-        config: {
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token,
-          expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : null,
-          scope: data.scope,
-        },
-      },
-      create: {
-        workspaceId,
-        provider: 'GITHUB',
-        config: {
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token,
-          expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : null,
-          scope: data.scope,
-        },
-      },
-    });
+          config,
+        })
+        .select()
+        .single();
+      return inserted;
+    }
   }
 
   async listRepositories(workspaceId: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: {
-        workspaceId_provider: {
-          workspaceId,
-          provider: 'GITHUB',
-        },
-      },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
 
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected for this workspace');
@@ -103,9 +107,12 @@ export class GithubService {
   }
 
   async getRepositoryDetails(workspaceId: string, owner: string, repo: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: 'GITHUB' } },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+      
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected');
     }
@@ -123,9 +130,12 @@ export class GithubService {
   }
 
   async createWebhook(workspaceId: string, owner: string, repo: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: 'GITHUB' } },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+      
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected');
     }
@@ -146,9 +156,12 @@ export class GithubService {
   }
 
   async updateFile(workspaceId: string, owner: string, repo: string, path: string, content: string, message: string, branch: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: 'GITHUB' } },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+      
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected');
     }
@@ -175,9 +188,11 @@ export class GithubService {
     });
 
     // Find project to publish event to the correct room
-    const project = await this.prisma.project.findFirst({
-      where: { workspaceId, repoUrl: `https://github.com/${owner}/${repo}` },
-    });
+    const { data: project } = await this.supabase.client
+      .from('Project')
+      .select('*')
+      .match({ workspaceId, repoUrl: `https://github.com/${owner}/${repo}` })
+      .single();
 
     if (project) {
       await this.eventService.publish(`project:${project.id}`, {
@@ -192,9 +207,12 @@ export class GithubService {
   }
 
   async getTree(workspaceId: string, owner: string, repo: string, branch: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: 'GITHUB' } },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+      
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected');
     }
@@ -211,9 +229,12 @@ export class GithubService {
   }
 
   async getFileContent(workspaceId: string, owner: string, repo: string, path: string, branch: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: 'GITHUB' } },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+      
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected');
     }
@@ -233,9 +254,12 @@ export class GithubService {
   }
 
   async deleteFile(workspaceId: string, owner: string, repo: string, path: string, message: string, branch: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: 'GITHUB' } },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+      
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected');
     }
@@ -259,9 +283,12 @@ export class GithubService {
   }
 
   async createPullRequest(workspaceId: string, owner: string, repo: string, title: string, head: string, base: string, body?: string) {
-    const integration = await this.prisma.workspaceIntegration.findUnique({
-      where: { workspaceId_provider: { workspaceId, provider: 'GITHUB' } },
-    });
+    const { data: integration } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('*')
+      .match({ workspaceId, provider: 'GITHUB' })
+      .single();
+      
     if (!integration || !integration.config) {
       throw new BadRequestException('GitHub not connected');
     }

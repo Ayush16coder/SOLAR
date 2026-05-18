@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class AuditService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private supabase: SupabaseService) {}
 
   async log(data: {
     workspaceId: string;
@@ -13,16 +13,21 @@ export class AuditService {
     resourceId: string;
     metadata?: any;
   }) {
-    return this.prisma.auditLog.create({
-      data,
-    });
+    const { data: result } = await this.supabase.client
+      .from('AuditLog')
+      .insert(data)
+      .select()
+      .single();
+    return result;
   }
 
   async getLogs(workspaceId: string) {
-    return this.prisma.auditLog.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+    const { data: logs } = await this.supabase.client
+      .from('AuditLog')
+      .select('*')
+      .eq('workspaceId', workspaceId)
+      .order('createdAt', { ascending: false })
+      .limit(100);
+    return logs;
   }
 }

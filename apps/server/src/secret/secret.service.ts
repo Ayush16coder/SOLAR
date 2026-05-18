@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -9,7 +9,7 @@ export class SecretService {
   private readonly key: Buffer;
 
   constructor(
-    private prisma: PrismaService,
+    private supabase: SupabaseService,
     private configService: ConfigService,
   ) {
     const secret = this.configService.get<string>('ENCRYPTION_KEY') || 'default-key-at-least-32-chars-long!!';
@@ -35,31 +35,49 @@ export class SecretService {
 
   async setSecret(workspaceId: string, key: string, value: string, description?: string) {
     const encryptedValue = this.encrypt(value);
-    return this.prisma.secret.upsert({
-      where: {
-        workspaceId_key: { workspaceId, key },
-      },
-      update: { value: encryptedValue, description },
-      create: { workspaceId, key, value: encryptedValue, description },
-    });
+    
+    // Check if exists
+    const { data: existing } = await this.supabase.client
+      .from('Secret')
+      .select('id')
+      .match({ workspaceId, key })
+      .single();
+
+    if (existing) {
+      const { data } = await this.supabase.client
+        .from('Secret')
+        .update({ value: encryptedValue, description })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      return data;
+    } else {
+      const { data } = await this.supabase.client
+        .from('Secret')
+        .insert({ workspaceId, key, value: encryptedValue, description })
+        .select()
+        .single();
+      return data;
+    }
   }
 
   async getSecret(workspaceId: string, key: string): Promise<string> {
-    const secret = await this.prisma.secret.findUnique({
-      where: {
-        workspaceId_key: { workspaceId, key },
-      },
-    });
+    const { data: secret } = await this.supabase.client
+      .from('Secret')
+      .select('*')
+      .match({ workspaceId, key })
+      .single();
 
     if (!secret) throw new BadRequestException('Secret not found');
     return this.decrypt(secret.value);
   }
 
   async listSecrets(workspaceId: string) {
-    const secrets = await this.prisma.secret.findMany({
-      where: { workspaceId },
-      select: { key: true, description: true, createdAt: true },
-    });
+    const { data: secrets } = await this.supabase.client
+      .from('Secret')
+      .select('key, description, createdAt')
+      .eq('workspaceId', workspaceId);
+      
     return secrets;
   }
 }

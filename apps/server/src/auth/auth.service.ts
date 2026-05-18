@@ -1,5 +1,5 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
@@ -7,31 +7,45 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class AuthService {
   constructor(
-    private prisma: PrismaService,
+    private supabase: SupabaseService,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
 
   async register(email: string, password: string, fullName?: string) {
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    const { data: existingUser } = await this.supabase.client
+      .from('User')
+      .select('id')
+      .eq('email', email)
+      .single();
+
     if (existingUser) {
       throw new ConflictException('User already exists');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await this.prisma.user.create({
-      data: {
+    const { data: user, error } = await this.supabase.client
+      .from('User')
+      .insert({
         email,
         password: hashedPassword,
         fullName,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (error || !user) throw new Error(error?.message || 'Failed to create user');
 
     return this.generateTokens(user.id, user.email);
   }
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const { data: user } = await this.supabase.client
+      .from('User')
+      .select('*')
+      .eq('email', email)
+      .single();
+
     if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -58,12 +72,10 @@ export class AuthService {
     });
 
     // Store refresh token in DB
-    await this.prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      },
+    await this.supabase.client.from('RefreshToken').insert({
+      token: refreshToken,
+      userId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
     });
 
     return {
@@ -73,27 +85,26 @@ export class AuthService {
   }
 
   async refreshTokens(refreshToken: string) {
-    const tokenData = await this.prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
-      include: { user: true },
-    });
+    const { data: tokenData } = await this.supabase.client
+      .from('RefreshToken')
+      .select('*, user:User(*)')
+      .eq('token', refreshToken)
+      .single();
 
-    if (!tokenData || tokenData.expiresAt < new Date()) {
+    if (!tokenData || new Date(tokenData.expiresAt) < new Date()) {
       if (tokenData) {
-        await this.prisma.refreshToken.delete({ where: { id: tokenData.id } });
+        await this.supabase.client.from('RefreshToken').delete().eq('id', tokenData.id);
       }
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     // Remove old refresh token
-    await this.prisma.refreshToken.delete({ where: { id: tokenData.id } });
+    await this.supabase.client.from('RefreshToken').delete().eq('id', tokenData.id);
 
     return this.generateTokens(tokenData.userId, tokenData.user.email);
   }
 
   async logout(refreshToken: string) {
-    await this.prisma.refreshToken.deleteMany({
-      where: { token: refreshToken },
-    });
+    await this.supabase.client.from('RefreshToken').delete().eq('token', refreshToken);
   }
 }

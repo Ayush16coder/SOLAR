@@ -1,56 +1,81 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { ProviderType } from '@prisma/client';
+import { SupabaseService } from '../supabase/supabase.service';
+import { ProviderType } from '../types';
 
 @Injectable()
 export class WorkspaceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private supabase: SupabaseService) {}
 
   async createWorkspace(name: string, teamId: string) {
     const slug = name.toLowerCase().replace(/ /g, '-');
-    return this.prisma.workspace.create({
-      data: {
+    const { data, error } = await this.supabase.client
+      .from('Workspace')
+      .insert({
         name,
         slug,
         teamId,
-      },
-    });
+      })
+      .select()
+      .single();
+      
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   async getWorkspaces(teamId: string) {
-    return this.prisma.workspace.findMany({
-      where: { teamId },
-    });
+    const { data, error } = await this.supabase.client
+      .from('Workspace')
+      .select('*')
+      .eq('teamId', teamId);
+      
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   async addIntegration(workspaceId: string, provider: ProviderType, config: any) {
-    return this.prisma.workspaceIntegration.upsert({
-      where: {
-        workspaceId_provider: {
+    // Check if exists
+    const { data: existing } = await this.supabase.client
+      .from('WorkspaceIntegration')
+      .select('id')
+      .match({ workspaceId, provider })
+      .single();
+
+    if (existing) {
+      const { data } = await this.supabase.client
+        .from('WorkspaceIntegration')
+        .update({ config })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      return data;
+    } else {
+      const { data } = await this.supabase.client
+        .from('WorkspaceIntegration')
+        .insert({
           workspaceId,
           provider,
-        },
-      },
-      update: { config },
-      create: {
-        workspaceId,
-        provider,
-        config,
-      },
-    });
+          config,
+        })
+        .select()
+        .single();
+      return data;
+    }
   }
 
   async getProjects(workspaceId: string) {
-    return this.prisma.project.findMany({
-      where: { workspaceId },
-      include: { deployments: true },
-    });
+    const { data } = await this.supabase.client
+      .from('Project')
+      .select('*, deployments:Deployment(*)')
+      .eq('workspaceId', workspaceId);
+    return data;
   }
 
   async getProject(projectId: string) {
-    return this.prisma.project.findUnique({
-      where: { id: projectId },
-      include: { workspace: true },
-    });
+    const { data } = await this.supabase.client
+      .from('Project')
+      .select('*, workspace:Workspace(*)')
+      .eq('id', projectId)
+      .single();
+    return data;
   }
 }
