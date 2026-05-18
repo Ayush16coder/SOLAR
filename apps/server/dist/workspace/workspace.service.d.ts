@@ -1,0 +1,11 @@
+import { SupabaseService } from '../supabase/supabase.service';
+import { ProviderType } from '../types';
+export declare class WorkspaceService {
+    private supabase;
+    constructor(supabase: SupabaseService);
+    createWorkspace(name: string, teamId: string): Promise<any>;
+    getWorkspaces(teamId: string): Promise<any[]>;
+    addIntegration(workspaceId: string, provider: ProviderType, config: any): Promise<any>;
+    getProjects(workspaceId: string): Promise<any[] | null>;
+    getProject(projectId: string): Promise<any>;
+}

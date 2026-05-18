@@ -12,9 +12,9 @@ out/
 
 # Build outputs
 dist
-# Exception: commit the webpack server bundle so Vercel has it at runtime
+# Exception: commit the compiled server dist so Vercel has it at runtime
 !apps/server/dist/
-!apps/server/dist/main.js
+!apps/server/dist/**
 build
 .turbo
 
