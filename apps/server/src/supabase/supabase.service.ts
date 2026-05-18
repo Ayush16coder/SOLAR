@@ -12,8 +12,9 @@ export class SupabaseService {
 
     if (!supabaseUrl || !supabaseKey) {
       this.logger.error('Supabase URL or Key is missing from environment variables.');
+      this.client = createClient('https://placeholder.supabase.co', 'placeholder');
+    } else {
+      this.client = createClient(supabaseUrl as string, supabaseKey as string);
     }
-
-    this.client = createClient(supabaseUrl as string, supabaseKey as string);
   }
 }
