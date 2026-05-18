@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "buildCommand": "cd apps/server && npm install && npm run build",
+  "outputDirectory": "apps/server",
+  "builds": [
+    {
+      "src": "apps/server/api/index.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": "apps/server/dist/**"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/apps/server/api/index.js"
+    }
+  ]
+}

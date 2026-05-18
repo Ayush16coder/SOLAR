@@ -1,14 +1,25 @@
-const handler = require('../dist/main.js').default;
+const path = require('path');
+
+// __dirname = /var/task/apps/server/api
+// dist is at /var/task/apps/server/dist
+const mainPath = path.resolve(__dirname, '..', 'dist', 'main.js');
+
+let cachedHandler;
 
 module.exports = async (req, res) => {
   try {
-    await handler(req, res);
+    if (!cachedHandler) {
+      cachedHandler = require(mainPath).default;
+    }
+    await cachedHandler(req, res);
   } catch (error) {
-    console.error('CRASH IN SERVERLESS FUNCTION:', error);
+    console.error('CRASH:', error);
     res.status(500).json({
       message: 'Internal Serverless Crash',
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
+      dirname: __dirname,
+      resolved: mainPath,
     });
   }
 };
